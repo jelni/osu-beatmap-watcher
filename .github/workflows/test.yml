@@ -22,6 +22,6 @@ jobs:
           rustup set profile minimal
           rustup default nightly
       - name: "Build"
-        run: "cargo build --release"
+        run: "cargo build"
       - name: "Run tests"
-        run: "cargo test --release --no-fail-fast"
+        run: "cargo test --no-fail-fast"
