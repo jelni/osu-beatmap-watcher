@@ -1,13 +1,22 @@
-use crate::osu::client;
+use crate::osu::client::{self, LoginState, Message, TaskState};
+use crate::osu::types;
 use eframe::{egui, epi};
 use std::env;
-
 mod config;
 mod windows;
 
+#[derive(Default)]
+struct UiState {
+    pub updater_state: TaskState,
+    pub config_open: bool,
+    pub login_state: LoginState,
+    pub beatmap: Option<types::Beatmap>,
+    pub ip: Option<String>,
+}
+
 pub struct App {
     config: Option<config::Config>,
-    config_open: bool,
+    ui_state: UiState,
     client: client::Client,
     hamster: egui_extras::RetainedImage,
 }
@@ -16,7 +25,7 @@ impl Default for App {
     fn default() -> Self {
         Self {
             config: None,
-            config_open: false,
+            ui_state: UiState::default(),
             client: client::Client::default(),
             hamster: egui_extras::RetainedImage::from_image_bytes(
                 "hamster.png",
@@ -28,24 +37,37 @@ impl Default for App {
 }
 
 impl epi::App for App {
-    fn update(&mut self, ctx: &egui::Context, _: &epi::Frame) {
-        self.client.update_state();
+    fn update(&mut self, ctx: &egui::Context, frame: &epi::Frame) {
+        if ctx.input().key_pressed(egui::Key::Escape) {
+            frame.quit();
+        }
+        for message in self.client.poll_updates() {
+            println!("{:?}", message);
+            match message {
+                Message::NewProgramState(state) => self.ui_state.updater_state = state,
+                Message::NewLoginState(state) => self.ui_state.login_state = state,
+                Message::NewBeatmap(beatmap) => self.ui_state.beatmap = beatmap,
+                Message::NewIp(ip) => self.ui_state.ip = Some(ip),
+            }
+        }
         self.draw(ctx);
     }
 
-    fn setup(
-        &mut self,
-        ctx: &egui::Context,
-        _frame: &epi::Frame,
-        storage: Option<&dyn epi::Storage>,
-    ) {
+    fn setup(&mut self, ctx: &egui::Context, _: &epi::Frame, storage: Option<&dyn epi::Storage>) {
         self.config = epi::get_value::<config::Config>(storage.unwrap(), epi::APP_KEY)
             .or(Some(config::Config::default()));
 
-        match self.config.as_ref().unwrap().dark_mode {
-            true => ctx.set_visuals(egui::Visuals::dark()),
-            false => ctx.set_visuals(egui::Visuals::light()),
-        };
+        let config = self.config.as_ref().unwrap();
+
+        ctx.set_visuals(match config.dark_mode {
+            true => egui::Visuals::dark(),
+            false => egui::Visuals::light(),
+        });
+
+        if !config.client_id.is_empty() && !config.client_secret.is_empty() {
+            self.client
+                .log_in(config.client_id.clone(), config.client_secret.clone());
+        }
     }
 
     fn save(&mut self, storage: &mut dyn epi::Storage) {
@@ -67,4 +89,8 @@ impl epi::App for App {
 
 impl App {
     const APP_NAME: &'static str = "osu! Beatmap Watcher";
+
+    fn should_show_settings(&self) -> bool {
+        self.ui_state.config_open || self.ui_state.login_state != LoginState::LoggedIn
+    }
 }

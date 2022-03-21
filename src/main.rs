@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console on Windows
-#![allow(dead_code)]
+#![feature(duration_constants)]
+
 use eframe::{egui, epi};
 
 mod gui;

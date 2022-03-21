@@ -1,40 +1,51 @@
 use crate::osu::http;
 use crate::osu::types;
-use std::sync::mpsc;
+use core::time;
 use std::sync::Arc;
+use std::{ops::Deref, sync::mpsc};
 use tokio::sync::Mutex;
 
-#[derive(PartialEq)]
-pub enum LoggedInState {
+#[derive(Debug, PartialEq)]
+pub enum LoginState {
     LoggedOut,
-    LoggingIn,
     LoggedIn,
+    LoggingIn,
+    LoginError(String),
 }
 
-impl Default for LoggedInState {
+impl Default for LoginState {
     fn default() -> Self {
-        LoggedInState::LoggedOut
+        Self::LoggedOut
     }
 }
 
-#[derive(Default)]
-pub struct State {
-    pub logged_in: LoggedInState,
-    pub beatmap: Option<types::Beatmap>,
-    pub ip: Option<String>,
+#[derive(Debug, PartialEq)]
+pub enum TaskState {
+    Running,
+    Stopping,
+    Stopped,
 }
 
-enum Message {
-    LoggedInState(LoggedInState),
-    ShowIp(String),
+impl Default for TaskState {
+    fn default() -> Self {
+        Self::Stopped
+    }
+}
+
+#[derive(Debug)]
+pub enum Message {
+    NewProgramState(TaskState),
+    NewLoginState(LoginState),
+    NewBeatmap(Option<types::Beatmap>),
+    NewIp(String),
 }
 
 pub struct Client {
     http: Arc<Mutex<http::Http>>,
+    updater_state: Arc<Mutex<TaskState>>,
     tx: mpsc::Sender<Message>,
     rx: mpsc::Receiver<Message>,
     rt: tokio::runtime::Runtime,
-    pub state: State,
 }
 
 impl Default for Client {
@@ -42,10 +53,10 @@ impl Default for Client {
         let (tx, rx) = mpsc::channel();
         Self {
             http: Arc::new(Mutex::new(http::Http::default())),
+            updater_state: Arc::new(Mutex::new(TaskState::default())),
             tx,
             rx,
             rt: tokio::runtime::Runtime::new().unwrap(),
-            state: State::default(),
         }
     }
 }
@@ -54,52 +65,92 @@ impl Client {
     pub fn log_in(&mut self, client_id: String, client_secret: String) {
         let http = self.http.clone();
         let tx = self.tx.clone();
-        tx.send(Message::LoggedInState(LoggedInState::LoggingIn))
+        tx.send(Message::NewLoginState(LoginState::LoggingIn))
             .unwrap();
         self.rt.spawn(async move {
             let mut http = http.lock().await;
-            let logged_in = if let Ok(access_token) = http
+            let logged_in = match http
                 .get_access_token(client_id.as_str(), client_secret.as_str())
                 .await
             {
-                http.access_token = Some(access_token);
-                LoggedInState::LoggedIn
-            } else {
-                http.access_token = None;
-                LoggedInState::LoggedOut
+                Ok(access_token) => {
+                    http.access_token = Some(access_token);
+                    LoginState::LoggedIn
+                }
+                Err(err) => {
+                    http.access_token = None;
+                    LoginState::LoginError(err.to_string())
+                }
             };
-            tx.send(Message::LoggedInState(logged_in)).unwrap();
+            tx.send(Message::NewLoginState(logged_in)).unwrap();
         });
     }
 
     pub fn log_out(&mut self) {
+        self.tx
+            .send(Message::NewLoginState(LoginState::LoggingIn))
+            .unwrap();
+
         let http = self.http.clone();
         let tx = self.tx.clone();
-        tx.send(Message::LoggedInState(LoggedInState::LoggingIn))
-            .unwrap();
+
         self.rt.spawn(async move {
             http.lock().await.access_token = None;
-            tx.send(Message::LoggedInState(LoggedInState::LoggedOut))
+            tx.send(Message::NewLoginState(LoginState::LoggedOut))
                 .unwrap();
         });
     }
 
-    pub async fn get_ip(&self) {
+    pub fn start_updating_beatmap(&self, beatmap_id: u32) {
+        self.tx
+            .send(Message::NewProgramState(TaskState::Running))
+            .unwrap();
+
+        let http = self.http.clone();
+        let updater_state = self.updater_state.clone();
+        let tx = self.tx.clone();
+
+        self.rt.spawn(async move {
+            *updater_state.lock().await = TaskState::Running;
+
+            while let TaskState::Running = updater_state.lock().await.deref() {
+                if let Ok(beatmap) = http.lock().await.get_beatmap(beatmap_id).await {
+                    tx.send(Message::NewBeatmap(Some(beatmap))).unwrap();
+                } else {
+                    tx.send(Message::NewBeatmap(None)).unwrap();
+                    break;
+                };
+                tokio::time::sleep(time::Duration::SECOND).await;
+            }
+
+            tx.send(Message::NewProgramState(TaskState::Stopped))
+                .unwrap();
+        });
+    }
+
+    pub fn stop_updating_beatmap(&self) {
+        self.tx
+            .send(Message::NewProgramState(TaskState::Stopping))
+            .unwrap();
+
+        let updater_state = self.updater_state.clone();
+
+        self.rt.spawn(async move {
+            *updater_state.lock().await = TaskState::Stopping;
+        });
+    }
+
+    pub fn get_ip(&self) {
         let http = self.http.clone();
         let tx = self.tx.clone();
         self.rt.spawn(async move {
             if let Ok(ip) = http.lock().await.get_ip().await {
-                tx.send(Message::ShowIp(ip)).unwrap();
+                tx.send(Message::NewIp(ip)).unwrap();
             }
         });
     }
 
-    pub fn update_state(&mut self) {
-        for message in self.rx.try_iter() {
-            match message {
-                Message::LoggedInState(state) => self.state.logged_in = state,
-                Message::ShowIp(ip) => self.state.ip = Some(ip),
-            }
-        }
+    pub fn poll_updates(&mut self) -> mpsc::TryIter<Message> {
+        self.rx.try_iter()
     }
 }
