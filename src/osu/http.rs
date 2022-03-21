@@ -37,7 +37,7 @@ impl Http {
         Ok(data.access_token)
     }
 
-    pub async fn get_beatmap(&self, beatmap_id: i64) -> Result<types::Beatmap, reqwest::Error> {
+    pub async fn get_beatmap(&self, beatmap_id: u32) -> Result<types::Beatmap, reqwest::Error> {
         let beatmap = self
             .http_client
             .get(format!("{}/api/v2/beatmaps/{beatmap_id}", Self::BASE_URL))
