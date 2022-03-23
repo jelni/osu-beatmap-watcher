@@ -1,8 +1,9 @@
+use eframe::egui;
+use rand::Rng;
+
 use self::gui::HamsterHack;
 use crate::gui;
 use crate::osu::client::{LoginState, TaskState};
-use eframe::egui;
-use rand::Rng;
 
 const HAMSTER_OFFSET: f32 = 48.;
 

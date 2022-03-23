@@ -1,9 +1,11 @@
-use crate::osu::{http, types};
-use eframe::egui;
 use std::ops::Deref;
 use std::sync::{mpsc, Arc};
 use std::time;
+
+use eframe::egui;
 use tokio::sync::Mutex;
+
+use crate::osu::{http, types};
 
 #[derive(Debug, PartialEq)]
 pub enum LoginState {
