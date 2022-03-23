@@ -1,7 +1,9 @@
+use std::env;
+
+use eframe::{egui, epi};
+
 use crate::osu::client::{self, LoginState, TaskState, Update};
 use crate::osu::types;
-use eframe::{egui, epi};
-use std::env;
 
 mod config;
 mod windows;

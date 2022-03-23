@@ -1,6 +1,7 @@
-use crate::osu::types;
 use eframe::egui;
 use image::EncodableLayout;
+
+use crate::osu::types;
 
 pub struct Http {
     http_client: reqwest::Client,
