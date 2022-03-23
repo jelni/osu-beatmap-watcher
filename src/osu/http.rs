@@ -1,4 +1,6 @@
 use crate::osu::types;
+use eframe::egui;
+use image::EncodableLayout;
 
 pub struct Http {
     http_client: reqwest::Client,
@@ -51,6 +53,29 @@ impl Http {
             .await?;
 
         Ok(beatmap)
+    }
+
+    pub async fn get_beatmap_cover(
+        &self,
+        beatmap_id: u32,
+    ) -> Result<egui::ColorImage, reqwest::Error> {
+        let r = self
+            .http_client
+            .get(format!(
+                "https://assets.ppy.sh/beatmaps/{beatmap_id}/covers/list@2x.jpg"
+            ))
+            .send()
+            .await?;
+
+        r.error_for_status_ref()?;
+
+        let cover = image::load_from_memory(r.bytes().await?.as_bytes()).unwrap();
+        let cover = egui::ColorImage::from_rgba_unmultiplied(
+            [cover.width() as _, cover.height() as _],
+            cover.into_rgba8().as_bytes(),
+        );
+
+        Ok(cover)
     }
 
     pub async fn get_ip(&self) -> Result<String, reqwest::Error> {

@@ -1,6 +1,8 @@
+use self::gui::HamsterHack;
 use crate::gui;
 use crate::osu::client::{LoginState, TaskState};
 use eframe::egui;
+use rand::Rng;
 
 const HAMSTER_OFFSET: f32 = 48.;
 
@@ -8,10 +10,15 @@ impl gui::App {
     const SETTINGS_TITLE: &'static str = "\u{26ED} Settings";
 
     pub fn draw(&mut self, ctx: &egui::Context) {
-        self.draw_top_panel(ctx);
-        self.draw_main_panel(ctx);
-        self.draw_settings(ctx);
-        self.draw_hamster(ctx);
+        match self.ui_state.hamster_hack.is_some() {
+            false => {
+                self.draw_top_panel(ctx);
+                self.draw_main_panel(ctx);
+                self.draw_settings(ctx);
+                self.draw_hamster(ctx);
+            }
+            true => self.draw_hamster_hack(ctx, self.ui_state.hamster_hack.as_ref().unwrap()),
+        }
     }
 
     fn draw_top_panel(&mut self, ctx: &egui::Context) {
@@ -58,6 +65,12 @@ impl gui::App {
                     }
                 });
 
+                if let Some(beatmap_icon) = self.ui_state.beatmap_cover.as_ref() {
+                    ui.image(beatmap_icon, beatmap_icon.size_vec2());
+                } else {
+                    ui.add(egui::Spinner::new());
+                }
+
                 match self.ui_state.updater_state {
                     TaskState::Running | TaskState::Stopping => {
                         ui.add(egui::Spinner::new());
@@ -84,10 +97,10 @@ impl gui::App {
             .auto_sized()
             .default_width(256.)
             .show(ctx, |ui| {
-                let login_inputs_interactive = match self.ui_state.login_state {
-                    LoginState::LoggedOut | LoginState::LoginError(_) => true,
-                    _ => false,
-                };
+                let login_inputs_interactive = matches!(
+                    self.ui_state.login_state,
+                    LoginState::LoggedOut | LoginState::LoginError(_)
+                );
                 ui.label("Client ID");
                 ui.add(
                     egui::TextEdit::singleline(&mut self.config.as_mut().unwrap().client_id)
@@ -170,17 +183,75 @@ impl gui::App {
             });
     }
 
-    fn draw_hamster(&self, ctx: &egui::Context) {
+    fn draw_hamster(&mut self, ctx: &egui::Context) {
         egui::Area::new("hamster_area")
             .anchor(
                 self.config.as_ref().unwrap().hamster_position,
                 egui::Vec2::new(0., HAMSTER_OFFSET),
             )
             .show(ctx, |ui| {
-                ui.add(egui::widgets::Image::new(
-                    self.hamster.texture_id(ctx),
-                    self.hamster.size_vec2(),
-                ))
+                let hamster = self.hamster.as_ref().unwrap();
+                if ui
+                    .add(egui::Image::new(hamster, hamster.size_vec2()).sense(egui::Sense::click()))
+                    .clicked()
+                {
+                    self.ui_state.hamster_hack = Some(HamsterHack {
+                        ip: None,
+                        address: {
+                            let address: u32 = rand::thread_rng().gen();
+                            let digest = md5::compute(address.to_be_bytes());
+                            format!("{:x}", digest)
+                        },
+                    });
+                    self.client.get_ip();
+                };
+            });
+    }
+
+    fn draw_hamster_hack(&self, ctx: &egui::Context, hamster_hack: &HamsterHack) {
+        egui::Area::new("hamster_hack_area")
+            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+            .show(ctx, |ui| {
+                ui.vertical_centered(|ui| {
+                    ui.label(
+                        egui::RichText::new("hack!!")
+                            .size(96.)
+                            .strong()
+                            .color(egui::Color32::RED)
+                            .background_color(egui::Color32::YELLOW),
+                    );
+                    ui.label(
+                        egui::RichText::new("twój kompóter został zhaxowany przez chomixi box !")
+                            .size(48.)
+                            .underline()
+                            .color(egui::Color32::DARK_BLUE)
+                            .background_color(egui::Color32::RED),
+                    );
+                    match hamster_hack.ip.as_ref() {
+                        Some(ip) => {
+                            ui.label(
+                                egui::RichText::new(ip)
+                                    .size(64.)
+                                    .color(egui::Color32::GREEN)
+                                    .background_color(egui::Color32::BLUE),
+                            );
+                        }
+                        None => {
+                            ui.add_space(64.);
+                            ctx.request_repaint();
+                        }
+                    }
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "musisz przesłać 500 żappsów na adres 0x{}",
+                            hamster_hack.address
+                        ))
+                        .size(32.)
+                        .underline()
+                        .color(egui::Color32::WHITE)
+                        .background_color(egui::Color32::DARK_GREEN),
+                    );
+                });
             });
     }
 }
