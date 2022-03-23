@@ -14,13 +14,14 @@ pub enum RankStatus {
 
 #[derive(Debug, serde::Deserialize)]
 pub struct Beatmapset {
-    pub artist: String,
     pub title: String,
+    pub artist: String,
     pub creator: String,
 }
 
 #[derive(Debug, serde::Deserialize)]
 pub struct Beatmap {
+    pub id: u32,
     pub ranked: RankStatus,
     pub beatmapset: Beatmapset,
 }

@@ -7,24 +7,25 @@ mod gui;
 mod osu;
 
 fn main() {
-    let image = image::load_from_memory(include_bytes!(concat!(
+    let icon = image::load_from_memory(include_bytes!(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/assets/icon.png"
     )))
     .unwrap();
-    let width = image.width();
-    let height = image.height();
+    let width = icon.width();
+    let height = icon.height();
 
-    let options = eframe::NativeOptions {
-        icon_data: Some(epi::IconData {
-            rgba: image.into_bytes(),
-            width,
-            height,
-        }),
-        initial_window_size: Some(egui::Vec2::new(600., 400.)),
-        min_window_size: Some(egui::Vec2::new(400., 200.)),
-        ..Default::default()
-    };
-
-    eframe::run_native(Box::new(gui::App::default()), options);
+    eframe::run_native(
+        Box::new(gui::App::default()),
+        eframe::NativeOptions {
+            icon_data: Some(epi::IconData {
+                rgba: icon.into_bytes(),
+                width,
+                height,
+            }),
+            initial_window_size: Some(egui::Vec2::new(600., 400.)),
+            min_window_size: Some(egui::Vec2::new(400., 200.)),
+            ..Default::default()
+        },
+    );
 }
