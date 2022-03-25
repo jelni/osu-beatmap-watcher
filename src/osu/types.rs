@@ -1,6 +1,7 @@
+use eframe::egui;
 use serde_repr::Deserialize_repr;
 
-#[derive(Debug, Deserialize_repr)]
+#[derive(Clone, Copy, Debug, Deserialize_repr)]
 #[repr(i8)]
 pub enum RankStatus {
     Graveyard = -2,
@@ -14,16 +15,18 @@ pub enum RankStatus {
 
 #[derive(Debug, serde::Deserialize)]
 pub struct Beatmapset {
-    pub title: String,
-    pub artist: String,
     pub creator: String,
+    pub artist: String,
+    pub title: String,
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(serde::Deserialize)]
 pub struct Beatmap {
     pub id: u32,
     pub ranked: RankStatus,
     pub beatmapset: Beatmapset,
+    #[serde(skip)]
+    pub cover: Option<egui::TextureHandle>,
 }
 
 #[derive(serde::Serialize)]
