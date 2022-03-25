@@ -8,6 +8,19 @@ use tokio::sync::Mutex;
 use crate::osu::{http, types};
 
 #[derive(Debug, PartialEq)]
+pub enum TaskState {
+    Running,
+    Stopping,
+    Stopped,
+}
+
+impl Default for TaskState {
+    fn default() -> Self {
+        Self::Stopped
+    }
+}
+
+#[derive(Debug, PartialEq)]
 pub enum LoginState {
     LoggedOut,
     LoggedIn,
@@ -18,19 +31,6 @@ pub enum LoginState {
 impl Default for LoginState {
     fn default() -> Self {
         Self::LoggedOut
-    }
-}
-
-#[derive(Debug, PartialEq)]
-pub enum TaskState {
-    Running,
-    Stopping,
-    Stopped,
-}
-
-impl Default for TaskState {
-    fn default() -> Self {
-        Self::Stopped
     }
 }
 
@@ -109,6 +109,8 @@ impl Client {
         self.tx
             .send(Update::UpdaterState(TaskState::Running))
             .unwrap();
+        self.tx.send(Update::Beatmap(None)).unwrap();
+        self.tx.send(Update::BeatmapCover(None)).unwrap();
 
         let http = self.http.clone();
         let updater_state = self.updater_state.clone();
@@ -119,10 +121,22 @@ impl Client {
 
             while let TaskState::Running = updater_state.lock().await.deref() {
                 match http.lock().await.get_beatmap(beatmap_id).await {
-                    Ok(beatmap) => tx.send(Update::Beatmap(Some(beatmap))).unwrap(),
+                    Ok(beatmap) => {
+                        let ranked = beatmap.ranked;
+                        tx.send(Update::Beatmap(Some(beatmap))).unwrap();
+                        if matches!(
+                            ranked,
+                            types::RankStatus::Graveyard
+                                | types::RankStatus::Wip
+                                | types::RankStatus::Ranked
+                                | types::RankStatus::Loved
+                        ) {
+                            break;
+                        }
+                    }
                     Err(err) => {
                         tx.send(Update::Beatmap(None)).unwrap();
-                        eprintln!("{:?}", err);
+                        eprintln!("{err:?}");
                         break;
                     }
                 }
@@ -152,7 +166,10 @@ impl Client {
         self.rt.spawn(async move {
             match http.lock().await.get_beatmap_cover(beatmap_id).await {
                 Ok(cover) => tx.send(Update::BeatmapCover(Some(cover))).unwrap(),
-                Err(err) => eprintln!("{err}"),
+                Err(err) => {
+                    // tx.send(Update::BeatmapCover(colo));
+                    eprintln!("{err:?}");
+                }
             }
         });
     }

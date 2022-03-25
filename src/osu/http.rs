@@ -25,7 +25,7 @@ impl Http {
         client_id: &str,
         client_secret: &str,
     ) -> Result<String, reqwest::Error> {
-        let data = self
+        let response = self
             .http_client
             .post(format!("{}/oauth/token", Self::BASE_URL))
             .json(&types::ClientCredentialsGrantRequest::from_client(
@@ -33,15 +33,18 @@ impl Http {
                 client_secret.to_string(),
             ))
             .send()
-            .await?
-            .json::<types::ClientCredentialsGrantResponse>()
             .await?;
 
+        response.error_for_status_ref()?;
+
+        let data = response
+            .json::<types::ClientCredentialsGrantResponse>()
+            .await?;
         Ok(data.access_token)
     }
 
     pub async fn get_beatmap(&self, beatmap_id: u32) -> Result<types::Beatmap, reqwest::Error> {
-        let beatmap = self
+        let response = self
             .http_client
             .get(format!("{}/api/v2/beatmaps/{beatmap_id}", Self::BASE_URL))
             .header(
@@ -49,18 +52,18 @@ impl Http {
                 format!("Bearer {}", self.access_token.as_ref().unwrap()),
             )
             .send()
-            .await?
-            .json::<types::Beatmap>()
             .await?;
 
-        Ok(beatmap)
+        response.error_for_status_ref()?;
+
+        Ok(response.json::<types::Beatmap>().await?)
     }
 
     pub async fn get_beatmap_cover(
         &self,
         beatmap_id: u32,
     ) -> Result<egui::ColorImage, reqwest::Error> {
-        let r = self
+        let response = self
             .http_client
             .get(format!(
                 "https://assets.ppy.sh/beatmaps/{beatmap_id}/covers/list@2x.jpg"
@@ -68,9 +71,9 @@ impl Http {
             .send()
             .await?;
 
-        r.error_for_status_ref()?;
+        response.error_for_status_ref()?;
 
-        let cover = image::load_from_memory(r.bytes().await?.as_bytes()).unwrap();
+        let cover = image::load_from_memory(response.bytes().await?.as_bytes()).unwrap();
         let cover = egui::ColorImage::from_rgba_unmultiplied(
             [cover.width() as _, cover.height() as _],
             cover.into_rgba8().as_bytes(),
@@ -80,14 +83,10 @@ impl Http {
     }
 
     pub async fn get_ip(&self) -> Result<String, reqwest::Error> {
-        let ip = self
-            .http_client
-            .get("https://ipinfo.io/ip")
-            .send()
-            .await?
-            .text()
-            .await?;
+        let response = self.http_client.get("https://ipinfo.io/ip").send().await?;
 
-        Ok(ip)
+        response.error_for_status_ref()?;
+
+        Ok(response.text().await?)
     }
 }

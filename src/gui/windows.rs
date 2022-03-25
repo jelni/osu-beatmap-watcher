@@ -3,6 +3,7 @@ use rand::Rng;
 
 use self::gui::HamsterHack;
 use crate::gui;
+use crate::gui::widgets;
 use crate::osu::client::{LoginState, TaskState};
 
 const HAMSTER_OFFSET: f32 = 48.;
@@ -66,23 +67,21 @@ impl gui::App {
                     }
                 });
 
-                if let Some(beatmap_icon) = self.ui_state.beatmap_cover.as_ref() {
-                    ui.image(beatmap_icon, beatmap_icon.size_vec2());
-                } else {
-                    ui.add(egui::Spinner::new());
-                }
-
-                match self.ui_state.updater_state {
-                    TaskState::Running | TaskState::Stopping => {
-                        ui.add(egui::Spinner::new());
-                    }
-                    _ => (),
-                }
-                ui.label(if let Some(beatmap) = self.ui_state.beatmap.as_ref() {
-                    beatmap.beatmapset.title.as_str()
-                } else {
-                    "None"
-                });
+                egui::Area::new("beatmap_area")
+                    .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+                    .show(ctx, |ui| match self.ui_state.beatmap.as_ref() {
+                        Some(beatmap) => {
+                            ui.add(widgets::DrawBeatmap::new(
+                                beatmap,
+                                &self.ui_state.updater_state,
+                            ));
+                        }
+                        None => {
+                            if self.ui_state.updater_state == TaskState::Running {
+                                ui.add(egui::Spinner::new());
+                            }
+                        }
+                    });
             });
         });
     }
@@ -184,16 +183,18 @@ impl gui::App {
             });
     }
 
-    fn draw_hamster(&mut self, ctx: &egui::Context) {
+    pub fn draw_hamster(&mut self, ctx: &egui::Context) {
         egui::Area::new("hamster_area")
+            .order(egui::Order::Background)
             .anchor(
                 self.config.as_ref().unwrap().hamster_position,
                 egui::Vec2::new(0., HAMSTER_OFFSET),
             )
             .show(ctx, |ui| {
-                let hamster = self.hamster.as_ref().unwrap();
                 if ui
-                    .add(egui::Image::new(hamster, hamster.size_vec2()).sense(egui::Sense::click()))
+                    .add(widgets::Hamster::new(
+                        self.hamster.as_ref().unwrap().clone(),
+                    ))
                     .clicked()
                 {
                     self.ui_state.hamster_hack = Some(HamsterHack {

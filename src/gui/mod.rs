@@ -6,6 +6,7 @@ use crate::osu::client::{self, LoginState, TaskState, Update};
 use crate::osu::types;
 
 mod config;
+mod widgets;
 mod windows;
 
 struct HamsterHack {
@@ -19,7 +20,6 @@ struct UiState {
     updater_state: TaskState,
     config_open: bool,
     beatmap: Option<types::Beatmap>,
-    beatmap_cover: Option<egui::TextureHandle>,
     hamster_hack: Option<HamsterHack>,
 }
 
@@ -42,12 +42,6 @@ impl epi::App for App {
                 Update::UpdaterState(state) => self.ui_state.updater_state = state,
                 Update::LoginState(state) => self.ui_state.login_state = state,
                 Update::Beatmap(beatmap) => {
-                    println!(
-                        "{:?} - {:?}",
-                        beatmap.as_ref(),
-                        self.ui_state.beatmap.as_ref()
-                    );
-
                     if let Some(new_beatmap) = beatmap.as_ref() {
                         if let Some(old_beatmap) = self.ui_state.beatmap.as_ref() {
                             if new_beatmap.id != old_beatmap.id {
@@ -61,8 +55,9 @@ impl epi::App for App {
                     self.ui_state.beatmap = beatmap;
                 }
                 Update::BeatmapCover(cover) => {
-                    self.ui_state.beatmap_cover =
-                        cover.map(|cover| ctx.load_texture("cover", cover));
+                    if let Some(beatmap) = self.ui_state.beatmap.as_mut() {
+                        beatmap.cover = cover.map(|cover| ctx.load_texture("cover", cover));
+                    }
                 }
                 Update::Ip(ip) => {
                     if let Some(hamster_hack) = self.ui_state.hamster_hack.as_mut() {
