@@ -3,30 +3,27 @@ use image::EncodableLayout;
 
 use crate::osu::types;
 
-pub struct Http {
-    http_client: reqwest::Client,
-    pub access_token: Option<String>,
-}
+pub struct Http(reqwest::Client);
 
 impl Default for Http {
     fn default() -> Self {
-        Self {
-            http_client: reqwest::Client::new(),
-            access_token: None,
-        }
+        Self(reqwest::Client::new())
     }
 }
 
 impl Http {
     const BASE_URL: &'static str = "https://osu.ppy.sh";
 
+    // to powinien byc config nie hardcode
+    // albo ENV z defaultem od biedy
+
     pub async fn get_access_token(
-        &mut self,
+        &self,
         client_id: &str,
         client_secret: &str,
     ) -> Result<String, reqwest::Error> {
         let response = self
-            .http_client
+            .0
             .post(format!("{}/oauth/token", Self::BASE_URL))
             .json(&types::ClientCredentialsGrantRequest::from_client(
                 client_id.to_string(),
@@ -43,20 +40,21 @@ impl Http {
         Ok(data.access_token)
     }
 
-    pub async fn get_beatmap(&self, beatmap_id: u32) -> Result<types::Beatmap, reqwest::Error> {
+    pub async fn get_beatmap(
+        &self,
+        beatmap_id: u32,
+        access_token: &str,
+    ) -> Result<types::Beatmap, reqwest::Error> {
         let response = self
-            .http_client
+            .0
             .get(format!("{}/api/v2/beatmaps/{beatmap_id}", Self::BASE_URL))
-            .header(
-                "Authorization",
-                format!("Bearer {}", self.access_token.as_ref().unwrap()),
-            )
+            .header("Authorization", format!("Bearer {}", access_token))
             .send()
             .await?;
 
         response.error_for_status_ref()?;
 
-        Ok(response.json::<types::Beatmap>().await?)
+        response.json::<types::Beatmap>().await
     }
 
     pub async fn get_beatmap_cover(
@@ -64,7 +62,7 @@ impl Http {
         beatmap_id: u32,
     ) -> Result<egui::ColorImage, reqwest::Error> {
         let response = self
-            .http_client
+            .0
             .get(format!(
                 "https://assets.ppy.sh/beatmaps/{beatmap_id}/covers/list@2x.jpg"
             ))
@@ -83,10 +81,10 @@ impl Http {
     }
 
     pub async fn get_ip(&self) -> Result<String, reqwest::Error> {
-        let response = self.http_client.get("https://ipinfo.io/ip").send().await?;
+        let response = self.0.get("https://ipinfo.io/ip").send().await?;
 
         response.error_for_status_ref()?;
 
-        Ok(response.text().await?)
+        response.text().await
     }
 }
