@@ -1,23 +1,26 @@
-name: "Run tests"
+name: Run tests
 
-on: ["push", "pull_request"]
+on:
+  push:
+    branches:
+      - main
+  pull_request:
 
 env:
-  CARGO_TERM_COLOR: "always"
+  CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-    runs-on: "ubuntu-latest"
+  test:
+    runs-on: ubuntu-latest
 
     steps:
-      - uses: "actions/checkout@main"
-      - name: "Install dependencies"
-        run: "sudo apt install libxcb-shape0-dev libxcb-xfixes0-dev"
-      - name: "Update Rust"
-        run: |
-          rustup set profile minimal
-          rustup default nightly
-      - name: "Build"
-        run: "cargo build"
-      - name: "Run tests"
-        run: "cargo test --no-fail-fast"
+      - uses: actions/checkout@v3
+      - name: Install dependencies
+        run: sudo apt install libxcb-shape0-dev libxcb-xfixes0-dev
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          command: test
