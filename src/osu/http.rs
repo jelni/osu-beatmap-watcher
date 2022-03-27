@@ -62,7 +62,9 @@ impl Http {
     ) -> Result<egui::ColorImage, reqwest::Error> {
         let response = self
             .http_client
-            .get(format!("https://assets.ppy.sh/beatmaps/{beatmap_id}/covers/list@2x.jpg"))
+            .get(format!(
+                "https://assets.ppy.sh/beatmaps/{beatmap_id}/covers/list@2x.jpg"
+            ))
             .send()
             .await?;
 

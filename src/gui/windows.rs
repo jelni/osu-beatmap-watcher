@@ -192,7 +192,9 @@ impl gui::App {
             )
             .show(ctx, |ui| {
                 if ui
-                    .add(widgets::Hamster::new(self.hamster.as_ref().unwrap().clone()))
+                    .add(widgets::Hamster::new(
+                        self.hamster.as_ref().unwrap().clone(),
+                    ))
                     .clicked()
                 {
                     self.ui_state.hamster_hack = Some(HamsterHack {
