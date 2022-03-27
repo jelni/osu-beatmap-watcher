@@ -1,6 +1,6 @@
 use eframe::egui;
+use serde::{Deserialize, Serialize};
 use serde_repr::Deserialize_repr;
-use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize_repr)]
 #[repr(i8)]
