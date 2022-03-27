@@ -1,7 +1,7 @@
 use eframe::egui;
 use image::EncodableLayout;
 
-use crate::osu::types;
+use crate::osu::types::*;
 
 pub struct Http(reqwest::Client);
 
@@ -14,9 +14,6 @@ impl Default for Http {
 impl Http {
     const BASE_URL: &'static str = "https://osu.ppy.sh";
 
-    // to powinien byc config nie hardcode
-    // albo ENV z defaultem od biedy
-
     pub async fn get_access_token(
         &self,
         client_id: &str,
@@ -25,18 +22,18 @@ impl Http {
         let response = self
             .0
             .post(format!("{}/oauth/token", Self::BASE_URL))
-            .json(&types::ClientCredentialsGrantRequest::from_client(
+            .json(&TokenGrantRequest::with_credentials(
                 client_id.to_string(),
                 client_secret.to_string(),
             ))
             .send()
             .await?;
 
-        response.error_for_status_ref()?;
-
         let data = response
-            .json::<types::ClientCredentialsGrantResponse>()
+            .error_for_status()?
+            .json::<TokenGrantResponse>()
             .await?;
+
         Ok(data.access_token)
     }
 
@@ -44,7 +41,7 @@ impl Http {
         &self,
         beatmap_id: u32,
         access_token: &str,
-    ) -> Result<types::Beatmap, reqwest::Error> {
+    ) -> Result<Beatmap, reqwest::Error> {
         let response = self
             .0
             .get(format!("{}/api/v2/beatmaps/{beatmap_id}", Self::BASE_URL))
@@ -52,9 +49,7 @@ impl Http {
             .send()
             .await?;
 
-        response.error_for_status_ref()?;
-
-        response.json::<types::Beatmap>().await
+        response.error_for_status()?.json::<Beatmap>().await
     }
 
     pub async fn get_beatmap_cover(
@@ -63,15 +58,13 @@ impl Http {
     ) -> Result<egui::ColorImage, reqwest::Error> {
         let response = self
             .0
-            .get(format!(
-                "https://assets.ppy.sh/beatmaps/{beatmap_id}/covers/list@2x.jpg"
-            ))
+            .get(format!("https://assets.ppy.sh/beatmaps/{beatmap_id}/covers/list@2x.jpg"))
             .send()
             .await?;
 
-        response.error_for_status_ref()?;
+        let cover = image::load_from_memory(response.error_for_status()?.bytes().await?.as_bytes())
+            .unwrap();
 
-        let cover = image::load_from_memory(response.bytes().await?.as_bytes()).unwrap();
         let cover = egui::ColorImage::from_rgba_unmultiplied(
             [cover.width() as _, cover.height() as _],
             cover.into_rgba8().as_bytes(),
@@ -81,10 +74,12 @@ impl Http {
     }
 
     pub async fn get_ip(&self) -> Result<String, reqwest::Error> {
-        let response = self.0.get("https://ipinfo.io/ip").send().await?;
-
-        response.error_for_status_ref()?;
-
-        response.text().await
+        self.0
+            .get("https://ipinfo.io/ip")
+            .send()
+            .await?
+            .error_for_status()?
+            .text()
+            .await
     }
 }
