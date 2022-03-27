@@ -1,10 +1,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console on Windows
-#![feature(duration_constants)]
 
 use eframe::{egui, epi};
+use osu_beatmap_watcher::osu;
 
 mod gui;
-mod osu;
 
 fn main() {
     let icon = image::load_from_memory(include_bytes!(concat!(
