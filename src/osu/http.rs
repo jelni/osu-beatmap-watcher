@@ -1,7 +1,7 @@
 use eframe::egui;
 use image::EncodableLayout;
 
-use crate::osu::types::*;
+use crate::osu::types::{Beatmap, TokenGrantRequest, TokenGrantResponse};
 
 pub struct Http {
     http_client: reqwest::Client,
