@@ -3,11 +3,15 @@ use image::EncodableLayout;
 
 use crate::osu::types::*;
 
-pub struct Http(reqwest::Client);
+pub struct Http {
+    http_client: reqwest::Client,
+}
 
 impl Default for Http {
     fn default() -> Self {
-        Self(reqwest::Client::new())
+        Self {
+            http_client: reqwest::Client::new(),
+        }
     }
 }
 
@@ -20,7 +24,7 @@ impl Http {
         client_secret: &str,
     ) -> Result<String, reqwest::Error> {
         let response = self
-            .0
+            .http_client
             .post(format!("{}/oauth/token", Self::BASE_URL))
             .json(&TokenGrantRequest::with_credentials(
                 client_id.to_string(),
@@ -43,7 +47,7 @@ impl Http {
         access_token: &str,
     ) -> Result<Beatmap, reqwest::Error> {
         let response = self
-            .0
+            .http_client
             .get(format!("{}/api/v2/beatmaps/{beatmap_id}", Self::BASE_URL))
             .header("Authorization", format!("Bearer {}", access_token))
             .send()
@@ -57,7 +61,7 @@ impl Http {
         beatmap_id: u32,
     ) -> Result<egui::ColorImage, reqwest::Error> {
         let response = self
-            .0
+            .http_client
             .get(format!("https://assets.ppy.sh/beatmaps/{beatmap_id}/covers/list@2x.jpg"))
             .send()
             .await?;
@@ -74,7 +78,7 @@ impl Http {
     }
 
     pub async fn get_ip(&self) -> Result<String, reqwest::Error> {
-        self.0
+        self.http_client
             .get("https://ipinfo.io/ip")
             .send()
             .await?
