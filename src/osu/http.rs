@@ -45,7 +45,7 @@ impl Http {
         &self,
         beatmap_id: u32,
         access_token: &str,
-    ) -> Result<Beatmap, reqwest::Error> {
+    ) -> Result<Option<Beatmap>, reqwest::Error> {
         let response = self
             .http_client
             .get(format!("{}/api/v2/beatmaps/{beatmap_id}", Self::BASE_URL))
@@ -53,13 +53,19 @@ impl Http {
             .send()
             .await?;
 
-        response.error_for_status()?.json::<Beatmap>().await
+        if response.status() == 404 {
+            return Ok(None);
+        } else {
+            response.error_for_status_ref()?;
+        }
+
+        Ok(Some(response.json::<Beatmap>().await?))
     }
 
     pub async fn get_beatmap_cover(
         &self,
         beatmap_id: u32,
-    ) -> Result<egui::ColorImage, reqwest::Error> {
+    ) -> Result<Option<egui::ColorImage>, reqwest::Error> {
         let response = self
             .http_client
             .get(format!(
@@ -68,15 +74,20 @@ impl Http {
             .send()
             .await?;
 
-        let cover = image::load_from_memory(response.error_for_status()?.bytes().await?.as_bytes())
-            .unwrap();
+        if response.status() == 403 {
+            return Ok(None);
+        } else {
+            response.error_for_status_ref()?;
+        }
+
+        let cover = image::load_from_memory(response.bytes().await?.as_bytes()).unwrap();
 
         let cover = egui::ColorImage::from_rgba_unmultiplied(
             [cover.width() as _, cover.height() as _],
             cover.into_rgba8().as_bytes(),
         );
 
-        Ok(cover)
+        Ok(Some(cover))
     }
 
     pub async fn get_ip(&self) -> Result<String, reqwest::Error> {

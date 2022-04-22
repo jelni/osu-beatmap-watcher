@@ -1,5 +1,6 @@
 use std::env;
 
+use eframe::epaint::ColorImage;
 use eframe::{egui, epi};
 
 use crate::osu::client::{self, LoginState, TaskState, Update};
@@ -9,7 +10,7 @@ mod config;
 mod widgets;
 mod windows;
 
-struct HamsterHack {
+pub struct HamsterHack {
     ip: Option<String>,
     address: String,
 }
@@ -31,32 +32,74 @@ pub struct App {
     hamster: Option<egui::TextureHandle>,
 }
 
-impl epi::App for App {
-    fn update(&mut self, ctx: &egui::Context, frame: &epi::Frame) {
+impl App {
+    pub const NAME: &'static str = "osu! Beatmap Watcher";
+
+    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        let hamster = image::load_from_memory(include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/assets/hamster.png"
+        )))
+        .unwrap();
+
+        let mut app = Self {
+            config: epi::get_value::<config::Config>(cc.storage.unwrap(), epi::APP_KEY)
+                .or_else(|| Some(config::Config::default())),
+            hamster: Some(cc.egui_ctx.load_texture(
+                "hamster",
+                egui::ColorImage::from_rgba_unmultiplied(
+                    [hamster.width() as _, hamster.height() as _],
+                    hamster.as_bytes(),
+                ),
+            )),
+            ..Default::default()
+        };
+
+        let config = app.config.as_ref().unwrap();
+
+        cc.egui_ctx.set_visuals(match config.dark_mode {
+            true => egui::Visuals::dark(),
+            false => egui::Visuals::light(),
+        });
+
+        if !config.client_id.is_empty() && !config.client_secret.is_empty() {
+            app.client
+                .log_in(config.client_id.clone(), config.client_secret.clone());
+        }
+
+        app
+    }
+
+    fn process_inputs(&self, ctx: &egui::Context, frame: &mut epi::Frame) {
         if ctx.input().key_pressed(egui::Key::Escape) {
             frame.quit();
         }
-        let mut update_cover = false;
+    }
+
+    fn poll_client_updates(&mut self, ctx: &egui::Context) {
         for message in self.client.poll_updates() {
             match message {
                 Update::UpdaterState(state) => self.ui_state.updater_state = state,
                 Update::LoginState(state) => self.ui_state.login_state = state,
                 Update::Beatmap(beatmap) => {
                     if let Some(new_beatmap) = beatmap.as_ref() {
-                        if let Some(old_beatmap) = self.ui_state.beatmap.as_ref() {
-                            if new_beatmap.id != old_beatmap.id {
-                                update_cover = true;
-                            }
-                        } else {
-                            update_cover = true;
+                        if self.ui_state.beatmap.is_none() {
+                            self.client.get_beatmap_cover(new_beatmap.id);
                         }
                     }
-
                     self.ui_state.beatmap = beatmap;
                 }
                 Update::BeatmapCover(cover) => {
                     if let Some(beatmap) = self.ui_state.beatmap.as_mut() {
-                        beatmap.cover = cover.map(|cover| ctx.load_texture("cover", cover));
+                        match cover {
+                            Some(cover) => {
+                                beatmap.cover = Some(ctx.load_texture("beatmap_cover", cover));
+                            }
+                            None => {
+                                beatmap.cover =
+                                    Some(ctx.load_texture("beatmap_cover", ColorImage::example()));
+                            }
+                        }
                     }
                 }
                 Update::Ip(ip) => {
@@ -66,54 +109,26 @@ impl epi::App for App {
                 }
             }
         }
-        if update_cover {
-            self.client
-                .get_beatmap_cover(self.ui_state.beatmap.as_ref().unwrap().id);
-        }
+    }
+
+    fn should_show_settings(&self) -> bool {
+        self.ui_state.config_open || self.ui_state.login_state != LoginState::LoggedIn
+    }
+}
+
+impl epi::App for App {
+    fn update(&mut self, ctx: &egui::Context, frame: &mut epi::Frame) {
+        self.process_inputs(ctx, frame);
+        self.poll_client_updates(ctx);
         self.draw(ctx);
-    }
-
-    fn clear_color(&self) -> egui::Rgba {
-        egui::Rgba::BLACK
-    }
-
-    fn setup(&mut self, ctx: &egui::Context, _: &epi::Frame, storage: Option<&dyn epi::Storage>) {
-        self.config = epi::get_value::<config::Config>(storage.unwrap(), epi::APP_KEY)
-            .or_else(|| Some(config::Config::default()));
-
-        let hamster = image::load_from_memory(include_bytes!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/assets/hamster.png"
-        )))
-        .unwrap();
-
-        self.hamster = Some(ctx.load_texture(
-            "hamster",
-            egui::ColorImage::from_rgba_unmultiplied(
-                [hamster.width() as _, hamster.height() as _],
-                hamster.as_bytes(),
-            ),
-        ));
-
-        let config = self.config.as_ref().unwrap();
-
-        ctx.set_visuals(match config.dark_mode {
-            true => egui::Visuals::dark(),
-            false => egui::Visuals::light(),
-        });
-
-        if !config.client_id.is_empty() && !config.client_secret.is_empty() {
-            self.client
-                .log_in(config.client_id.clone(), config.client_secret.clone());
-        }
     }
 
     fn save(&mut self, storage: &mut dyn epi::Storage) {
         epi::set_value(storage, epi::APP_KEY, self.config.as_ref().unwrap());
     }
 
-    fn name(&self) -> &str {
-        Self::APP_NAME
+    fn clear_color(&self) -> egui::Rgba {
+        egui::Rgba::BLACK
     }
 
     fn persist_native_window(&self) -> bool {
@@ -123,12 +138,8 @@ impl epi::App for App {
     fn persist_egui_memory(&self) -> bool {
         false
     }
-}
 
-impl App {
-    const APP_NAME: &'static str = "osu! Beatmap Watcher";
-
-    fn should_show_settings(&self) -> bool {
-        self.ui_state.config_open || self.ui_state.login_state != LoginState::LoggedIn
+    fn warm_up_enabled(&self) -> bool {
+        true
     }
 }

@@ -19,18 +19,21 @@ impl gui::App {
                 self.draw_settings(ctx);
                 self.draw_hamster(ctx);
             }
-            true => self.draw_hamster_hack(ctx, self.ui_state.hamster_hack.as_ref().unwrap()),
+            true => self.draw_hamster_hack(ctx),
         }
     }
 
     fn draw_top_panel(&mut self, ctx: &egui::Context) {
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             ui.set_enabled(!self.should_show_settings());
-            ui.with_layout(egui::Layout::right_to_left(), |ui| {
-                if ui.button(Self::SETTINGS_TITLE).clicked() {
-                    self.ui_state.config_open = true;
-                }
-            });
+            ui.horizontal(|ui| {
+                egui::warn_if_debug_build(ui);
+                ui.with_layout(egui::Layout::right_to_left(), |ui| {
+                    if ui.button(Self::SETTINGS_TITLE).clicked() {
+                        self.ui_state.config_open = true;
+                    }
+                });
+            })
         });
     }
 
@@ -51,7 +54,7 @@ impl gui::App {
                             }
                         }
                         TaskState::Stopping => {
-                            ui.add(egui::Spinner::new());
+                            ui.spinner();
                             ui.label("Stopping…");
                         }
                         TaskState::Stopped => {
@@ -69,6 +72,8 @@ impl gui::App {
 
                 egui::Area::new("beatmap_area")
                     .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+                    .order(egui::Order::Background)
+                    .enabled(!self.should_show_settings())
                     .show(ctx, |ui| match self.ui_state.beatmap.as_ref() {
                         Some(beatmap) => {
                             ui.add(widgets::DrawBeatmap::new(
@@ -78,7 +83,7 @@ impl gui::App {
                         }
                         None => {
                             if self.ui_state.updater_state == TaskState::Running {
-                                ui.add(egui::Spinner::new());
+                                ui.spinner();
                             }
                         }
                     });
@@ -116,25 +121,29 @@ impl gui::App {
                         .hint_text("client_secret"),
                 );
 
-                ui.horizontal(|ui| match &self.ui_state.login_state {
-                    LoginState::LoggedOut => {
-                        if ui.button("\u{27A1} Log In").clicked() {
-                            let config = self.config.as_ref().unwrap();
-                            self.client
-                                .log_in(config.client_id.clone(), config.client_secret.clone());
+                ui.horizontal(|ui| {
+                    match &self.ui_state.login_state {
+                        LoginState::LoggingIn => {
+                            ui.spinner();
+                            ui.label("Logging In…");
                         }
-                    }
-                    LoginState::LoggingIn => {
-                        ui.add(egui::Spinner::new());
-                        ui.label("Logging In…");
-                    }
-                    LoginState::LoggedIn => {
-                        if ui.button("\u{2B05} Log Out").clicked() {
-                            self.client.log_out();
+                        LoginState::LoggedIn => {
+                            if ui.button("\u{2B05} Log Out").clicked() {
+                                self.client.log_out();
+                            }
                         }
+                        LoginState::LoginError(err) => {
+                            ui.horizontal(|ui| {
+                                ui.colored_label(egui::Color32::LIGHT_RED, format!("Error: {err}"));
+                            });
+                        }
+                        _ => (),
                     }
-                    LoginState::LoginError(err) => {
-                        ui.colored_label(egui::Color32::LIGHT_RED, format!("Error: {err}"));
+
+                    if login_inputs_interactive && ui.button("\u{27A1} Log In").clicked() {
+                        let config = self.config.as_ref().unwrap();
+                        self.client
+                            .log_in(config.client_id.clone(), config.client_secret.clone());
                     }
                 });
 
@@ -210,50 +219,18 @@ impl gui::App {
             });
     }
 
-    fn draw_hamster_hack(&self, ctx: &egui::Context, hamster_hack: &HamsterHack) {
+    fn draw_hamster_hack(&mut self, ctx: &egui::Context) {
         egui::Area::new("hamster_hack_area")
             .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
             .show(ctx, |ui| {
-                ui.vertical_centered(|ui| {
-                    ui.label(
-                        egui::RichText::new("hack!!")
-                            .size(96.)
-                            .strong()
-                            .color(egui::Color32::RED)
-                            .background_color(egui::Color32::YELLOW),
-                    );
-                    ui.label(
-                        egui::RichText::new("twój kompóter został zhaxowany przez chomixi box !")
-                            .size(48.)
-                            .underline()
-                            .color(egui::Color32::DARK_BLUE)
-                            .background_color(egui::Color32::RED),
-                    );
-                    match hamster_hack.ip.as_ref() {
-                        Some(ip) => {
-                            ui.label(
-                                egui::RichText::new(ip)
-                                    .size(64.)
-                                    .color(egui::Color32::GREEN)
-                                    .background_color(egui::Color32::BLUE),
-                            );
-                        }
-                        None => {
-                            ui.add_space(64.);
-                            ctx.request_repaint();
-                        }
-                    }
-                    ui.label(
-                        egui::RichText::new(format!(
-                            "musisz przesłać 500 żappsów na adres 0x{}",
-                            hamster_hack.address
-                        ))
-                        .size(32.)
-                        .underline()
-                        .color(egui::Color32::WHITE)
-                        .background_color(egui::Color32::DARK_GREEN),
-                    );
-                });
+                if ui
+                    .add(widgets::DrawHamsterHack::new(
+                        self.ui_state.hamster_hack.as_ref().unwrap(),
+                    ))
+                    .clicked()
+                {
+                    self.ui_state.hamster_hack = None;
+                }
             });
     }
 }
