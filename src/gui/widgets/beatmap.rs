@@ -1,4 +1,5 @@
-use eframe::egui;
+use eframe::egui::{self, RichText};
+use osu_beatmap_watcher::osu::types::RankStatus;
 
 use crate::osu::client::TaskState;
 use crate::osu::types::Beatmap;
@@ -19,8 +20,8 @@ impl<'a> DrawBeatmap<'a> {
 
 impl egui::Widget for DrawBeatmap<'_> {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
-        ui.horizontal(|ui| {
-            ui.group(|ui| {
+        ui.group(|ui| {
+            ui.horizontal(|ui| {
                 match self.beatmap.cover.as_ref() {
                     Some(beatmap_icon) => ui.image(beatmap_icon, egui::Vec2::splat(64.)),
                     None => ui.add(egui::Spinner::new().size(64.)),
@@ -30,9 +31,14 @@ impl egui::Widget for DrawBeatmap<'_> {
                     let title = self.beatmap.beatmapset.title.as_str();
                     ui.label(format!("{artist} — {title}"));
                     ui.label(self.beatmap.beatmapset.creator.as_str());
-                    ui.label(format!("{:?}", self.beatmap.ranked));
+                    ui.label(RichText::new(format!("{:?}", self.beatmap.ranked)).color(
+                        match self.beatmap.ranked {
+                            RankStatus::Ranked => egui::Color32::GREEN,
+                            _ => egui::Color32::WHITE,
+                        },
+                    ));
                     if *self.updater_state == TaskState::Running {
-                        ui.add(egui::Spinner::new());
+                        ui.spinner();
                     }
                 })
             })

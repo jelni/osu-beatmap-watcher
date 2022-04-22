@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console on Windows
 
 use eframe::{egui, epi};
+use gui::App;
 use osu_beatmap_watcher::osu;
 
 mod gui;
@@ -15,7 +16,7 @@ fn main() {
     let height = icon.height();
 
     eframe::run_native(
-        Box::new(gui::App::default()),
+        App::NAME,
         eframe::NativeOptions {
             icon_data: Some(epi::IconData {
                 rgba: icon.into_bytes(),
@@ -26,5 +27,6 @@ fn main() {
             min_window_size: Some(egui::Vec2::new(400., 200.)),
             ..Default::default()
         },
+        Box::new(|cc| Box::new(App::new(cc))),
     );
 }
