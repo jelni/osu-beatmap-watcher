@@ -1,88 +1,94 @@
-use eframe::egui;
+use eframe::egui::{
+    self, Area, Button, CentralPanel, Color32, Context, Layout, Order, TextEdit, TopBottomPanel,
+    Visuals, Window,
+};
+use eframe::emath::{Align, Align2};
+use eframe::epaint::Vec2;
 use rand::Rng;
 
-use self::gui::HamsterHack;
+use self::gui::HamsterHackData;
+use super::widgets::beatmap::BeatmapWidget;
+use super::widgets::hamster::HamsterWidget;
+use super::widgets::hamster_hack::HamsterHackWidget;
 use crate::gui;
-use crate::gui::widgets;
-use crate::osu::client::{LoginState, TaskState};
+use crate::osu::client::LoginState;
 
 const HAMSTER_OFFSET: f32 = 48.;
 
 impl gui::App {
-    const SETTINGS_TITLE: &'static str = "\u{26ED} Settings";
+    const SETTINGS_TITLE: &'static str = "⛭ Settings";
 
-    pub fn draw(&mut self, ctx: &egui::Context) {
-        match self.ui_state.hamster_hack.is_some() {
-            false => {
-                self.draw_top_panel(ctx);
-                self.draw_main_panel(ctx);
-                self.draw_settings(ctx);
-                self.draw_hamster(ctx);
-            }
-            true => self.draw_hamster_hack(ctx),
+    pub fn draw(&mut self, ctx: &Context) {
+        if self.state.hamster_hack.is_some() {
+            self.draw_hamster_hack(ctx);
+        } else {
+            self.draw_top_panel(ctx);
+            self.draw_main_panel(ctx);
+            self.draw_settings(ctx);
+            self.draw_hamster(ctx);
         }
     }
 
-    fn draw_top_panel(&mut self, ctx: &egui::Context) {
-        egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
-            ui.set_enabled(!self.should_show_settings());
+    fn draw_top_panel(&mut self, ctx: &Context) {
+        TopBottomPanel::top("top_panel").show(ctx, |ui| {
+            ui.set_enabled(!self.state.config_open);
             ui.horizontal(|ui| {
                 egui::warn_if_debug_build(ui);
-                ui.with_layout(egui::Layout::right_to_left(), |ui| {
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     if ui.button(Self::SETTINGS_TITLE).clicked() {
-                        self.ui_state.config_open = true;
+                        self.state.config_open = true;
                     }
                 });
             })
         });
     }
 
-    fn draw_main_panel(&mut self, ctx: &egui::Context) {
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.set_enabled(!self.should_show_settings());
+    fn draw_main_panel(&mut self, ctx: &Context) {
+        CentralPanel::default().show(ctx, |ui| {
+            ui.set_enabled(!self.state.config_open);
             ui.vertical_centered(|ui| {
-                ui.horizontal(|ui| {
-                    ui.add_enabled(
-                        self.ui_state.updater_state == TaskState::Stopped,
-                        egui::TextEdit::singleline(&mut self.config.as_mut().unwrap().beatmap_id),
-                    );
+                ui.add(
+                    TextEdit::singleline(&mut self.config.beatmap_id)
+                        .interactive(self.state.worker.is_none()),
+                );
 
-                    match self.ui_state.updater_state {
-                        TaskState::Running => {
-                            if ui.button("Stop").clicked() {
-                                self.client.stop_updating_beatmap();
-                            }
+                match &self.state.worker {
+                    Some(worker) => {
+                        if ui.button("Stop").clicked() {
+                            worker.abort();
                         }
-                        TaskState::Stopping => {
-                            ui.spinner();
-                            ui.label("Stopping…");
-                        }
-                        TaskState::Stopped => {
-                            let beatmap_id =
-                                self.config.as_ref().unwrap().beatmap_id.parse::<u32>();
+                    }
+                    None => {
+                        if let LoginState::LoggedIn { access_token } = &self.state.login_state {
+                            let beatmap_id = self.config.beatmap_id.parse::<u32>();
                             if ui
-                                .add_enabled(beatmap_id.is_ok(), egui::Button::new("Start"))
+                                .add_enabled(beatmap_id.is_ok(), Button::new("Start"))
                                 .clicked()
                             {
-                                self.client.start_updating_beatmap(beatmap_id.unwrap());
+                                if let Ok(beatmap_id) = beatmap_id {
+                                    self.state.worker = Some(
+                                        self.client.poll_beatmap(access_token.clone(), beatmap_id),
+                                    );
+                                }
                             }
                         }
                     }
-                });
+                }
 
-                egui::Area::new("beatmap_area")
-                    .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
-                    .order(egui::Order::Background)
-                    .enabled(!self.should_show_settings())
-                    .show(ctx, |ui| match self.ui_state.beatmap.as_ref() {
+                Area::new("beatmap_area")
+                    .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
+                    .order(Order::Background)
+                    .enabled(!self.state.config_open)
+                    .show(ctx, |ui| match self.state.beatmap.as_ref() {
                         Some(beatmap) => {
-                            ui.add(widgets::DrawBeatmap::new(
+                            ui.add(BeatmapWidget {
                                 beatmap,
-                                &self.ui_state.updater_state,
-                            ));
+                                beatmap_cover: self.state.beatmap_cover.clone(),
+                                worker_running: self.state.worker.is_some(),
+                            });
                         }
                         None => {
-                            if self.ui_state.updater_state == TaskState::Running {
+                            if self.state.worker.is_some() {
                                 ui.spinner();
                             }
                         }
@@ -91,59 +97,58 @@ impl gui::App {
         });
     }
 
-    fn draw_settings(&mut self, ctx: &egui::Context) {
-        let mut window = egui::Window::new(Self::SETTINGS_TITLE);
-        if self.ui_state.login_state == LoginState::LoggedIn {
-            window = window.open(&mut self.ui_state.config_open);
+    fn draw_settings(&mut self, ctx: &Context) {
+        let mut window = Window::new(Self::SETTINGS_TITLE);
+        if let LoginState::LoggedIn { .. } = self.state.login_state {
+            window = window.open(&mut self.state.config_open);
         }
         window
-            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+            .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
             .collapsible(false)
             .auto_sized()
             .default_width(256.)
             .show(ctx, |ui| {
                 let login_inputs_interactive = matches!(
-                    self.ui_state.login_state,
+                    self.state.login_state,
                     LoginState::LoggedOut | LoginState::LoginError(_)
                 );
                 ui.label("Client ID");
                 ui.add(
-                    egui::TextEdit::singleline(&mut self.config.as_mut().unwrap().client_id)
+                    TextEdit::singleline(&mut self.config.client_id)
                         .interactive(login_inputs_interactive)
                         .hint_text("client_id"),
                 );
 
                 ui.label("Client Secret");
                 ui.add(
-                    egui::TextEdit::singleline(&mut self.config.as_mut().unwrap().client_secret)
+                    TextEdit::singleline(&mut self.config.client_secret)
                         .password(true)
                         .interactive(login_inputs_interactive)
                         .hint_text("client_secret"),
                 );
 
                 ui.horizontal(|ui| {
-                    match &self.ui_state.login_state {
+                    if login_inputs_interactive && ui.button("➡ Log In").clicked() {
+                        self.client.log_in(
+                            self.config.client_id.clone(),
+                            self.config.client_secret.clone(),
+                        );
+                    }
+
+                    match &self.state.login_state {
+                        LoginState::LoggedOut => (),
+                        LoginState::LoggedIn { .. } => {
+                            if ui.button("⬅ Log Out").clicked() {
+                                self.state.login_state = LoginState::LoggedOut;
+                            }
+                        }
                         LoginState::LoggingIn => {
                             ui.spinner();
                             ui.label("Logging In…");
                         }
-                        LoginState::LoggedIn => {
-                            if ui.button("\u{2B05} Log Out").clicked() {
-                                self.client.log_out();
-                            }
-                        }
                         LoginState::LoginError(err) => {
-                            ui.horizontal(|ui| {
-                                ui.colored_label(egui::Color32::LIGHT_RED, format!("Error: {err}"));
-                            });
+                            ui.colored_label(Color32::LIGHT_RED, err);
                         }
-                        _ => (),
-                    }
-
-                    if login_inputs_interactive && ui.button("\u{27A1} Log In").clicked() {
-                        let config = self.config.as_ref().unwrap();
-                        self.client
-                            .log_in(config.client_id.clone(), config.client_secret.clone());
                     }
                 });
 
@@ -152,13 +157,13 @@ impl gui::App {
                 ui.label("Theme");
                 ui.horizontal(|ui| {
                     let dark_mode = ui.visuals().dark_mode;
-                    if ui.selectable_label(dark_mode, "\u{1F319} Dark").clicked() {
-                        self.config.as_mut().unwrap().dark_mode = true;
-                        ctx.set_visuals(egui::Visuals::dark());
+                    if ui.selectable_label(dark_mode, "🌙 Dark").clicked() {
+                        self.config.dark_mode = true;
+                        ctx.set_visuals(Visuals::dark());
                     }
-                    if ui.selectable_label(!dark_mode, "\u{2600} Light").clicked() {
-                        self.config.as_mut().unwrap().dark_mode = false;
-                        ctx.set_visuals(egui::Visuals::light());
+                    if ui.selectable_label(!dark_mode, "☀ Light").clicked() {
+                        self.config.dark_mode = false;
+                        ctx.set_visuals(Visuals::light());
                     }
                 });
 
@@ -166,23 +171,21 @@ impl gui::App {
                 ui.horizontal(|ui| {
                     if ui
                         .selectable_label(
-                            self.config.as_ref().unwrap().hamster_position
-                                == egui::Align2::LEFT_BOTTOM,
-                            "\u{25C0} Left-Handed",
+                            self.config.hamster_position == Align2::LEFT_BOTTOM,
+                            "◀ Left-Handed",
                         )
                         .clicked()
                     {
-                        self.config.as_mut().unwrap().hamster_position = egui::Align2::LEFT_BOTTOM;
+                        self.config.hamster_position = Align2::LEFT_BOTTOM;
                     }
                     if ui
                         .selectable_label(
-                            self.config.as_ref().unwrap().hamster_position
-                                == egui::Align2::RIGHT_BOTTOM,
-                            "\u{25B6} Right-Handed",
+                            self.config.hamster_position == Align2::RIGHT_BOTTOM,
+                            "▶ Right-Handed",
                         )
                         .clicked()
                     {
-                        self.config.as_mut().unwrap().hamster_position = egui::Align2::RIGHT_BOTTOM;
+                        self.config.hamster_position = Align2::RIGHT_BOTTOM;
                     }
                 });
 
@@ -192,44 +195,43 @@ impl gui::App {
             });
     }
 
-    pub fn draw_hamster(&mut self, ctx: &egui::Context) {
-        egui::Area::new("hamster_area")
-            .order(egui::Order::Background)
-            .anchor(
-                self.config.as_ref().unwrap().hamster_position,
-                egui::Vec2::new(0., HAMSTER_OFFSET),
-            )
+    pub fn draw_hamster(&mut self, ctx: &Context) {
+        Area::new("hamster_area")
+            .order(Order::Background)
+            .anchor(self.config.hamster_position, Vec2::new(0., HAMSTER_OFFSET))
             .show(ctx, |ui| {
                 if ui
-                    .add(widgets::Hamster::new(
-                        self.hamster.as_ref().unwrap().clone(),
-                    ))
+                    .add(HamsterWidget {
+                        hamster: self.hamster.clone(),
+                    })
                     .clicked()
                 {
-                    self.ui_state.hamster_hack = Some(HamsterHack {
-                        ip: None,
+                    let mut rng = rand::thread_rng();
+                    self.state.hamster_hack = Some(HamsterHackData {
+                        ip: rng.gen::<[u8; 4]>().map(|n| n.to_string()).join("."),
                         address: {
-                            let address: u32 = rand::thread_rng().gen();
-                            let digest = md5::compute(address.to_be_bytes());
-                            format!("{:x}", digest)
+                            let random_bytes = rng.gen::<[u8; 16]>();
+                            random_bytes
+                                .iter()
+                                .map(|byte| format!("{byte:02x}"))
+                                .collect()
                         },
                     });
-                    self.client.get_ip();
                 };
             });
     }
 
-    fn draw_hamster_hack(&mut self, ctx: &egui::Context) {
-        egui::Area::new("hamster_hack_area")
-            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+    fn draw_hamster_hack(&mut self, ctx: &Context) {
+        Area::new("hamster_hack_area")
+            .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
             .show(ctx, |ui| {
                 if ui
-                    .add(widgets::DrawHamsterHack::new(
-                        self.ui_state.hamster_hack.as_ref().unwrap(),
-                    ))
+                    .add(HamsterHackWidget {
+                        hamster_hack: self.state.hamster_hack.as_ref().unwrap(),
+                    })
                     .clicked()
                 {
-                    self.ui_state.hamster_hack = None;
+                    self.state.hamster_hack = None;
                 }
             });
     }

@@ -1,8 +1,9 @@
-use eframe::egui;
+use std::fmt::Display;
+
 use serde::{Deserialize, Serialize};
 use serde_repr::Deserialize_repr;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize_repr)]
+#[derive(Clone, Copy, Deserialize_repr)]
 #[repr(i8)]
 pub enum RankStatus {
     Graveyard = -2,
@@ -14,35 +15,47 @@ pub enum RankStatus {
     Loved = 4,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-pub struct Beatmapset {
-    pub creator: String,
-    pub artist: String,
-    pub title: String,
+impl Display for RankStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            RankStatus::Graveyard => "Graveyard",
+            RankStatus::Wip => "WIP",
+            RankStatus::Pending => "Pending",
+            RankStatus::Ranked => "Ranked",
+            RankStatus::Approved => "Approved",
+            RankStatus::Qualified => "Qualified",
+            RankStatus::Loved => "Loved",
+        })
+    }
 }
 
-#[derive(Clone, PartialEq, Eq, Deserialize)]
+#[derive(Deserialize)]
+pub struct Beatmapset {
+    pub title: String,
+    pub artist: String,
+    pub creator: String,
+}
+
+#[derive(Deserialize)]
 pub struct Beatmap {
     pub id: u32,
     pub ranked: RankStatus,
     pub beatmapset: Beatmapset,
-    #[serde(skip)]
-    pub cover: Option<egui::TextureHandle>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum GrantType {
     ClientCredentials,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum GrantScope {
     Public,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Serialize)]
 pub struct TokenGrantRequest {
     pub client_id: String,
     pub client_secret: String,
@@ -51,17 +64,17 @@ pub struct TokenGrantRequest {
 }
 
 impl TokenGrantRequest {
-    pub fn with_credentials(client_id: String, client_secret: String) -> Self {
+    pub fn with_credentials<S: Into<String>>(client_id: S, client_secret: S) -> Self {
         Self {
-            client_id,
-            client_secret,
+            client_id: client_id.into(),
+            client_secret: client_secret.into(),
             grant_type: GrantType::ClientCredentials,
             scope: GrantScope::Public,
         }
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Deserialize)]
 pub struct TokenGrantResponse {
     pub access_token: String,
     pub expires_in: i32,
