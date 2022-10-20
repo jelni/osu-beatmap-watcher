@@ -1,4 +1,4 @@
-use eframe::egui;
+use eframe::emath::Align2;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
@@ -7,7 +7,7 @@ pub struct Config {
     pub client_secret: String,
     pub beatmap_id: String,
     pub dark_mode: bool,
-    pub hamster_position: egui::Align2,
+    pub hamster_position: Align2,
 }
 
 impl Default for Config {
@@ -17,7 +17,7 @@ impl Default for Config {
             client_secret: String::new(),
             beatmap_id: String::new(),
             dark_mode: true,
-            hamster_position: egui::Align2::LEFT_BOTTOM,
+            hamster_position: Align2::RIGHT_BOTTOM,
         }
     }
 }

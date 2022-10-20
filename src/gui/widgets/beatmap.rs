@@ -1,45 +1,41 @@
-use eframe::egui::{self, RichText};
-use osu_beatmap_watcher::osu::types::RankStatus;
+use eframe::egui::{Color32, Response, RichText, Spinner, Ui, Widget};
+use eframe::epaint::{TextureHandle, Vec2};
 
-use crate::osu::client::TaskState;
-use crate::osu::types::Beatmap;
+use crate::osu::types::{Beatmap, RankStatus};
 
-pub struct DrawBeatmap<'a> {
-    beatmap: &'a Beatmap,
-    updater_state: &'a TaskState,
+#[allow(clippy::module_name_repetitions)]
+pub struct BeatmapWidget<'a> {
+    pub beatmap: &'a Beatmap,
+    pub beatmap_cover: Option<TextureHandle>,
+    pub worker_running: bool,
 }
 
-impl<'a> DrawBeatmap<'a> {
-    pub fn new(beatmap: &'a Beatmap, updater_state: &'a TaskState) -> Self {
-        Self {
-            beatmap,
-            updater_state,
-        }
-    }
-}
-
-impl egui::Widget for DrawBeatmap<'_> {
-    fn ui(self, ui: &mut egui::Ui) -> egui::Response {
+impl Widget for BeatmapWidget<'_> {
+    fn ui(self, ui: &mut Ui) -> Response {
         ui.group(|ui| {
             ui.horizontal(|ui| {
-                match self.beatmap.cover.as_ref() {
-                    Some(beatmap_icon) => ui.image(beatmap_icon, egui::Vec2::splat(64.)),
-                    None => ui.add(egui::Spinner::new().size(64.)),
+                match self.beatmap_cover {
+                    Some(beatmap_icon) => ui.image(&beatmap_icon, Vec2::splat(64.)),
+                    None => ui.add(Spinner::new().size(64.)),
                 };
                 ui.vertical(|ui| {
-                    let artist = self.beatmap.beatmapset.artist.as_str();
-                    let title = self.beatmap.beatmapset.title.as_str();
-                    ui.label(format!("{artist} — {title}"));
-                    ui.label(self.beatmap.beatmapset.creator.as_str());
-                    ui.label(RichText::new(format!("{:?}", self.beatmap.ranked)).color(
-                        match self.beatmap.ranked {
-                            RankStatus::Ranked => egui::Color32::GREEN,
-                            _ => egui::Color32::WHITE,
-                        },
-                    ));
-                    if *self.updater_state == TaskState::Running {
-                        ui.spinner();
-                    }
+                    let beatmapset = &self.beatmap.beatmapset;
+                    ui.label(RichText::new(&beatmapset.title).strong());
+                    ui.label(&beatmapset.artist);
+                    ui.label(&beatmapset.creator);
+                    ui.horizontal(|ui| {
+                        if self.worker_running {
+                            ui.spinner();
+                        }
+                        ui.label(RichText::new(format!("{}", self.beatmap.ranked)).color(
+                            match self.beatmap.ranked {
+                                RankStatus::Graveyard | RankStatus::Wip => Color32::GRAY,
+                                RankStatus::Ranked => Color32::GREEN,
+                                RankStatus::Loved => Color32::LIGHT_RED,
+                                _ => Color32::WHITE,
+                            },
+                        ));
+                    });
                 })
             })
         })

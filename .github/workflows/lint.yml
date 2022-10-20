@@ -1,18 +1,42 @@
-name: Clippy check
+name: Lint
 
-on: pull_request
+on: push
 
 jobs:
-  clippy_check:
+  clippy:
+    name: Clippy
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
+      - name: Checkout
+        uses: actions/checkout@main
+
+      - name: Install toolchain
+        uses: actions-rs/toolchain@master
         with:
-            toolchain: nightly
-            components: clippy
-            override: true
-      - uses: actions-rs/clippy-check@v1
+          toolchain: nightly
+          default: true
+          profile: minimal
+          components: clippy
+
+      - name: Run Clippy
+        run: cargo clippy -- -D warnings
+
+  rustfmt:
+    name: Rustfmt
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@main
+
+      - name: Install toolchain
+        uses: actions-rs/toolchain@master
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          args: --all-features
+          toolchain: nightly
+          default: true
+          profile: minimal
+          components: rustfmt
+
+      - name: Run Rustfmt
+        run: cargo fmt --check
